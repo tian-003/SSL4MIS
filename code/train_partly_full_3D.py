@@ -32,7 +32,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
                     default='/mnt/sdd/tb/data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='BraTS2019_Interpolation_Consistency_Training', help='experiment_name')
+                    default='BraTs2019_partly_full_3D', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
@@ -50,12 +50,8 @@ parser.add_argument('--seed', type=int,  default=1337, help='random seed')
 # label and unlabel
 parser.add_argument('--labeled_bs', type=int, default=2,
                     help='labeled_batch_size per gpu')
-parser.add_argument('--labeled_num', type=int, default=14,
+parser.add_argument('--labeled_num', type=int, default=25,
                     help='labeled data')
-parser.add_argument('--total_labeled_num', type=int, default=140,
-                    help='total labeled data')
-parser.add_argument('--ict_alpha', type=int, default=0.2,
-                    help='ict_alpha')
 # costs
 parser.add_argument('--ema_decay', type=float,  default=0.99, help='ema_decay')
 parser.add_argument('--consistency_type', type=str,
@@ -66,6 +62,13 @@ parser.add_argument('--consistency_rampup', type=float,
                     default=200.0, help='consistency_rampup')
 
 args = parser.parse_args()
+
+"""选择GPU ID"""
+gpu_list = [4] #[0,1]
+gpu_list_str = ','.join(map(str, gpu_list))
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 
 def get_current_consistency_weight(epoch):
@@ -112,7 +115,7 @@ def train(args, snapshot_path):
         random.seed(args.seed + worker_id)
 
     labeled_idxs = list(range(0, args.labeled_num))
-    unlabeled_idxs = list(range(args.labeled_num, args.total_labeled_num))
+    unlabeled_idxs = list(range(args.labeled_num, 250))
     batch_sampler = TwoStreamBatchSampler(
         labeled_idxs, unlabeled_idxs, batch_size, batch_size-args.labeled_bs)
 
@@ -139,42 +142,28 @@ def train(args, snapshot_path):
 
             volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
             volume_batch, label_batch = volume_batch.cuda(), label_batch.cuda()
-            labeled_volume_batch = volume_batch[:args.labeled_bs]
             unlabeled_volume_batch = volume_batch[args.labeled_bs:]
 
-            # ICT mix factors
-            ict_mix_factors = np.random.beta(
-                args.ict_alpha, args.ict_alpha, size=(args.labeled_bs//2, 1, 1, 1, 1))
-            ict_mix_factors = torch.tensor(
-                ict_mix_factors, dtype=torch.float).cuda()
-            unlabeled_volume_batch_0 = unlabeled_volume_batch[0:1, ...]
-            unlabeled_volume_batch_1 = unlabeled_volume_batch[1:2, ...]
+            noise = torch.clamp(torch.randn_like(
+                unlabeled_volume_batch) * 0.1, -0.2, 0.2)
+            ema_inputs = unlabeled_volume_batch + noise
 
-            # Mix images
-            batch_ux_mixed = unlabeled_volume_batch_0 * \
-                (1.0 - ict_mix_factors) + \
-                unlabeled_volume_batch_1 * ict_mix_factors
-            input_volume_batch = torch.cat(
-                [labeled_volume_batch, batch_ux_mixed], dim=0)
-            outputs = model(input_volume_batch)
+            outputs = model(volume_batch)
             outputs_soft = torch.softmax(outputs, dim=1)
-            with torch.no_grad():
-                ema_output_ux0 = torch.softmax(
-                    ema_model(unlabeled_volume_batch_0), dim=1)
-                ema_output_ux1 = torch.softmax(
-                    ema_model(unlabeled_volume_batch_1), dim=1)
-                batch_pred_mixed = ema_output_ux0 * \
-                    (1.0 - ict_mix_factors) + ema_output_ux1 * ict_mix_factors
+            # with torch.no_grad():
+            #     ema_output = ema_model(ema_inputs)
+            #     ema_output_soft = torch.softmax(ema_output, dim=1)
 
             loss_ce = ce_loss(outputs[:args.labeled_bs],
                               label_batch[:args.labeled_bs][:])
             loss_dice = dice_loss(
                 outputs_soft[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1))
             supervised_loss = 0.5 * (loss_dice + loss_ce)
-            consistency_weight = get_current_consistency_weight(iter_num//150)
-            consistency_loss = torch.mean(
-                (outputs_soft[args.labeled_bs:] - batch_pred_mixed)**2)
-            loss = supervised_loss + consistency_weight * consistency_loss
+            # consistency_weight = get_current_consistency_weight(iter_num//150)
+            # consistency_loss = torch.mean(
+            #     (outputs_soft[args.labeled_bs:] - ema_output_soft)**2)
+
+            loss = supervised_loss 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -189,10 +178,10 @@ def train(args, snapshot_path):
             writer.add_scalar('info/total_loss', loss, iter_num)
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
-            writer.add_scalar('info/consistency_loss',
-                              consistency_loss, iter_num)
-            writer.add_scalar('info/consistency_weight',
-                              consistency_weight, iter_num)
+            # writer.add_scalar('info/consistency_loss',
+            #                   consistency_loss, iter_num)
+            # writer.add_scalar('info/consistency_weight',
+            #                   consistency_weight, iter_num)
 
             logging.info(
                 'iteration %d : loss : %f, loss_ce: %f, loss_dice: %f' %
@@ -221,7 +210,7 @@ def train(args, snapshot_path):
                 model.eval()
                 avg_metric = test_all_case(
                     model, args.root_path, test_list="val.txt", num_classes=2, patch_size=args.patch_size,
-                    stride_xy=32, stride_z=32)
+                    stride_xy=64, stride_z=64)
                 if avg_metric[:, 0].mean() > best_performance:
                     best_performance = avg_metric[:, 0].mean()
                     save_mode_path = os.path.join(snapshot_path,
@@ -268,13 +257,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    """选择GPU ID"""
-    gpu_list = [5] #[0,1]
-    gpu_list_str = ','.join(map(str, gpu_list))
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
-
-    snapshot_path = "/mnt/sdd/tb/model/{}_{}_labeled/{}".format(
+    snapshot_path = "/mnt/sdd/tb/SSL4MIS/model/{}_{}/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
