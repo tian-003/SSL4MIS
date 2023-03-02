@@ -95,15 +95,16 @@ class MedicalImageDeal(object):
         return (self.img - self.img.min()) / (self.img.max() - self.img.min())
 
 
+all_flair = glob.glob('/mnt/sdd/tb/BRATS2019_ori/ori/*/*/*_t1ce.nii.gz')
 # all_flair = glob.glob('/mnt/sdd/tb/BRATS2019/ori/*/*/*_t1ce.nii.gz')
-all_flair = glob.glob('/mnt/sdd/tb/BRATS2019/ori/*/*/*_t1ce.nii.gz')
 for p in all_flair:
     data = sitk.GetArrayFromImage(sitk.ReadImage(p))
     lab = sitk.GetArrayFromImage(sitk.ReadImage(p.replace("t1ce", "seg")))
     img, lab = brain_bbox(data, lab)
     img = MedicalImageDeal(img, percent=0.999).valid_img
     img = itensity_normalize_one_volume(img)
-    lab[lab > 0] = 1
+    lab[lab ==4] = 3
+
     uid = p.split("/")[-1]
     sitk.WriteImage(sitk.GetImageFromArray(
         img), "/mnt/sdd/tb/brats2019_/t1ce/{}".format(uid))

@@ -85,7 +85,7 @@ def train(args, snapshot_path):
     train_data_path = args.root_path
     batch_size = args.batch_size
     max_iterations = args.max_iterations
-    num_classes = 2
+    num_classes = 4
 
     def create_model(ema=False):
         # Network definition
