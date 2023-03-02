@@ -147,8 +147,7 @@ def train(args, snapshot_path):
                 ema_output = ema_model(ema_inputs)
                 ema_output_soft = torch.softmax(ema_output, dim=1)
 
-            loss_ce = ce_loss(outputs[:args.labeled_bs],
-                              label_batch[:args.labeled_bs][:])
+            loss_ce = ce_loss(outputs[:args.labeled_bs],label_batch[:args.labeled_bs][:])
             loss_dice = dice_loss(
                 outputs_soft[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1))
             supervised_loss = 0.5 * (loss_dice + loss_ce)
@@ -249,7 +248,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "/mnt/sdd/tb/SSL4MIS/model/{}_{}/{}".format(
+    snapshot_path = "/mnt/sdd/tb/model/{}_{}/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)

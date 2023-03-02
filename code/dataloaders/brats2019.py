@@ -36,7 +36,7 @@ class BraTS2019(Dataset):
 
     def __getitem__(self, idx):
         image_name = self.image_list[idx]
-        h5f = h5py.File(self._base_dir + "/data/{}.h5".format(image_name), 'r')
+        h5f = h5py.File(self._base_dir + "/BraTS2019_T1CE/{}.h5".format(image_name), 'r')
         image = h5f['image'][:]
         label = h5f['label'][:]
         sample = {'image': image, 'label': label.astype(np.uint8)}
