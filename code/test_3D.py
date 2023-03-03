@@ -20,13 +20,13 @@ parser.add_argument('--model', type=str,
 def Inference(FLAGS):
     snapshot_path = "/mnt/sdd/tb/model/{}/{}".format(FLAGS.exp, FLAGS.model)
     num_classes = 2
-    test_save_path = "/mnt/sdd/tb/model/{}/Prediction".format(FLAGS.exp)
+    test_save_path = "/mnt/sdd/tb/model/{}/Prediction-2".format(FLAGS.exp)
     if os.path.exists(test_save_path):
         shutil.rmtree(test_save_path)
     os.makedirs(test_save_path)
     net = unet_3D(n_classes=num_classes, in_channels=1).cuda()
-    save_mode_path = os.path.join(
-        snapshot_path, '{}_best_model.pth'.format(FLAGS.model))
+    # save_mode_path = os.path.join(snapshot_path, '{}_best_model.pth'.format(FLAGS.model))
+    save_mode_path = 'model/BraTs2019_Fully_Supervised2/unet_3D/iter_1200_dice_0.7089.pth'
     net.load_state_dict(torch.load(save_mode_path))
     print("init weight from {}".format(save_mode_path))
     net.eval()
