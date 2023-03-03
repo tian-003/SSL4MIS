@@ -10,17 +10,17 @@ from test_3D_util import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/tb/data/BraTS2019', help='Name of Experiment')
+                    default='/mnt/sdd/yd2tb/data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='BraTs2019_Fully_Supervised2', help='experiment_name')
+                    default='BraTs2019_Fully_Supervised-3', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 
 
 def Inference(FLAGS):
-    snapshot_path = "/mnt/sdd/tb/model/{}/{}".format(FLAGS.exp, FLAGS.model)
+    snapshot_path = "/mnt/sdd/yd2tb/model/{}/{}".format(FLAGS.exp, FLAGS.model)
     num_classes = 2
-    test_save_path = "/mnt/sdd/tb/model/{}/Prediction".format(FLAGS.exp)
+    test_save_path = "/mnt/sdd/yd2tb/model/{}/Prediction".format(FLAGS.exp)
     if os.path.exists(test_save_path):
         shutil.rmtree(test_save_path)
     os.makedirs(test_save_path)

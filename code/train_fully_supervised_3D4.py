@@ -30,38 +30,27 @@ from val_3D import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/yd2tb/BraTS2019', help='Name of Experiment')
+                    default='/mnt/sdd/yd2tb/data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='BraTs2019_Mean_Teacher', help='experiment_name')
+                    default='BraTs2019_Fully_Supervised4', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
-                    default=6000, help='maximum epoch number to train')
+                    default=10000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int, default=4,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
-parser.add_argument('--base_lr', type=float,  default=0.001,
+parser.add_argument('--base_lr', type=float,  default=0.01,
                     help='segmentation network learning rate')
 parser.add_argument('--patch_size', type=list,  default=[96, 96, 96],
                     help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
-
-# label and unlabel
-parser.add_argument('--labeled_bs', type=int, default=2,
-                    help='labeled_batch_size per gpu')
 parser.add_argument('--labeled_num', type=int, default=25,
                     help='labeled data')
-# costs
-parser.add_argument('--ema_decay', type=float,  default=0.99, help='ema_decay')
-parser.add_argument('--consistency_type', type=str,
-                    default="mse", help='consistency_type')
-parser.add_argument('--consistency', type=float,
-                    default=0.1, help='consistency')
-parser.add_argument('--consistency_rampup', type=float,
-                    default=200.0, help='consistency_rampup')
 
 args = parser.parse_args()
+
 
 """选择GPU ID"""
 gpu_list = [6] #[0,1]
@@ -69,40 +58,16 @@ gpu_list_str = ','.join(map(str, gpu_list))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def get_current_consistency_weight(epoch):
-    # Consistency ramp-up from https://arxiv.org/abs/1610.02242
-    return args.consistency * ramps.sigmoid_rampup(epoch, args.consistency_rampup)
-
-
-def update_ema_variables(model, ema_model, alpha, global_step):
-    # Use the true average until the exponential average is more correct
-    alpha = min(1 - 1 / (global_step + 1), alpha)
-    for ema_param, param in zip(ema_model.parameters(), model.parameters()):
-        ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
-
-
 def train(args, snapshot_path):
     base_lr = args.base_lr
     train_data_path = args.root_path
     batch_size = args.batch_size
     max_iterations = args.max_iterations
-    num_classes = 2
-
-    def create_model(ema=False):
-        # Network definition
-        net = net_factory_3d(net_type=args.model, in_chns=1, class_num=num_classes)
-        model = net.cuda()
-        if ema:
-            for param in model.parameters():
-                param.detach_()
-        return model
-
-    model = create_model()
-    ema_model = create_model(ema=True)
-
+    num_classes = 4
+    model = net_factory_3d(net_type=args.model, in_chns=1, class_num=num_classes)
     db_train = BraTS2019(base_dir=train_data_path,
                          split='train',
-                         num=None,
+                         num=args.labeled_num,
                          transform=transforms.Compose([
                              RandomRotFlip(),
                              RandomCrop(args.patch_size),
@@ -112,16 +77,10 @@ def train(args, snapshot_path):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    labeled_idxs = list(range(0, args.labeled_num))
-    unlabeled_idxs = list(range(args.labeled_num, 250))
-    batch_sampler = TwoStreamBatchSampler(
-        labeled_idxs, unlabeled_idxs, batch_size, batch_size-args.labeled_bs)
-
-    trainloader = DataLoader(db_train, batch_sampler=batch_sampler,
-                             num_workers=8, pin_memory=True, worker_init_fn=worker_init_fn)
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True,
+                             num_workers=16, pin_memory=True, worker_init_fn=worker_init_fn)
 
     model.train()
-    ema_model.train()
 
     optimizer = optim.SGD(model.parameters(), lr=base_lr,
                           momentum=0.9, weight_decay=0.0001)
@@ -140,30 +99,16 @@ def train(args, snapshot_path):
 
             volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
             volume_batch, label_batch = volume_batch.cuda(), label_batch.cuda()
-            unlabeled_volume_batch = volume_batch[args.labeled_bs:]
-
-            noise = torch.clamp(torch.randn_like(
-                unlabeled_volume_batch) * 0.1, -0.2, 0.2)
-            ema_inputs = unlabeled_volume_batch + noise
 
             outputs = model(volume_batch)
             outputs_soft = torch.softmax(outputs, dim=1)
-            with torch.no_grad():
-                ema_output = ema_model(ema_inputs)
-                ema_output_soft = torch.softmax(ema_output, dim=1)
 
-            loss_ce = ce_loss(outputs[:args.labeled_bs],label_batch[:args.labeled_bs][:])
-            loss_dice = dice_loss(
-                outputs_soft[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1))
-            supervised_loss = 0.5 * (loss_dice + loss_ce)
-            consistency_weight = get_current_consistency_weight(iter_num//150)
-            consistency_loss = torch.mean(
-                (outputs_soft[args.labeled_bs:] - ema_output_soft)**2)
-            loss = supervised_loss + consistency_weight * consistency_loss
+            loss_ce = ce_loss(outputs, label_batch)
+            loss_dice = dice_loss(outputs_soft, label_batch.unsqueeze(1))
+            loss = 0.5 * (loss_dice + loss_ce)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            update_ema_variables(model, ema_model, args.ema_decay, iter_num)
 
             lr_ = base_lr * (1.0 - iter_num / max_iterations) ** 0.9
             for param_group in optimizer.param_groups:
@@ -174,10 +119,6 @@ def train(args, snapshot_path):
             writer.add_scalar('info/total_loss', loss, iter_num)
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
-            writer.add_scalar('info/consistency_loss',
-                              consistency_loss, iter_num)
-            writer.add_scalar('info/consistency_weight',
-                              consistency_weight, iter_num)
 
             logging.info(
                 'iteration %d : loss : %f, loss_ce: %f, loss_dice: %f' %
@@ -205,7 +146,7 @@ def train(args, snapshot_path):
             if iter_num > 0 and iter_num % 200 == 0:
                 model.eval()
                 avg_metric = test_all_case(
-                    model, args.root_path, test_list="val.txt", num_classes=2, patch_size=args.patch_size,
+                    model, args.root_path, test_list="val.txt", num_classes=4, patch_size=args.patch_size,
                     stride_xy=64, stride_z=64)
                 if avg_metric[:, 0].mean() > best_performance:
                     best_performance = avg_metric[:, 0].mean()
@@ -253,8 +194,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "/mnt/sdd/yd2tb/model/{}_{}/{}".format(
-        args.exp, args.labeled_num, args.model)
+    snapshot_path = "/mnt/sdd/yd2tb/model/{}/{}".format(args.exp, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
 

@@ -30,13 +30,13 @@ from val_3D import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/tb/data/BraTS2019', help='Name of Experiment')
+                    default='/mnt/sdd/yd2tb/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='BraTs2019_UA_Mean_Teacher', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
-                    default=10000, help='maximum epoch number to train')
+                    default=6000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int, default=4,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
@@ -64,7 +64,7 @@ parser.add_argument('--consistency_rampup', type=float,
 args = parser.parse_args()
 
 """选择GPU ID"""
-gpu_list = [6] #[0,1]
+gpu_list = [5] #[0,1]
 gpu_list_str = ','.join(map(str, gpu_list))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -87,7 +87,7 @@ def train(args, snapshot_path):
     train_data_path = args.root_path
     batch_size = args.batch_size
     max_iterations = args.max_iterations
-    num_classes = 2
+    num_classes = 4
 
     def create_model(ema=False):
         # Network definition
@@ -120,7 +120,7 @@ def train(args, snapshot_path):
         labeled_idxs, unlabeled_idxs, batch_size, batch_size-args.labeled_bs)
 
     trainloader = DataLoader(db_train, batch_sampler=batch_sampler,
-                             num_workers=4, pin_memory=True, worker_init_fn=worker_init_fn)
+                             num_workers=8, pin_memory=True, worker_init_fn=worker_init_fn)
 
     model.train()
     ema_model.train()
@@ -128,7 +128,7 @@ def train(args, snapshot_path):
     optimizer = optim.SGD(model.parameters(), lr=base_lr,
                           momentum=0.9, weight_decay=0.0001)
     ce_loss = CrossEntropyLoss()
-    dice_loss = losses.DiceLoss(2)
+    dice_loss = losses.DiceLoss(4)
 
     writer = SummaryWriter(snapshot_path + '/log')
     logging.info("{} iterations per epoch".format(len(trainloader)))
@@ -230,7 +230,7 @@ def train(args, snapshot_path):
             if iter_num > 0 and iter_num % 200 == 0:
                 model.eval()
                 avg_metric = test_all_case(
-                    model, args.root_path, test_list="val.txt", num_classes=2, patch_size=args.patch_size,
+                    model, args.root_path, test_list="val.txt", num_classes=4, patch_size=args.patch_size,
                     stride_xy=64, stride_z=64)
                 if avg_metric[:, 0].mean() > best_performance:
                     best_performance = avg_metric[:, 0].mean()
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "/mnt/sdd/tb/model/{}_{}/{}".format(
+    snapshot_path = "/mnt/sdd/yd2tb/model/{}_{}/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)

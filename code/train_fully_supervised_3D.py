@@ -30,18 +30,18 @@ from val_3D import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/tb/data/BraTS2019', help='Name of Experiment')
+                    default='/mnt/sdd/yd2tb/data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='BraTs2019_Fully_Supervised2', help='experiment_name')
+                    default='BraTs2019_Fully_Supervised-4', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
                     default=6000, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=4,
+parser.add_argument('--batch_size', type=int, default=2,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
-parser.add_argument('--base_lr', type=float,  default=0.005,
+parser.add_argument('--base_lr', type=float,  default=0.0001,
                     help='segmentation network learning rate')
 parser.add_argument('--patch_size', type=list,  default=[96, 96, 96],
                     help='patch size of network input')
@@ -53,7 +53,7 @@ args = parser.parse_args()
 
 
 """选择GPU ID"""
-gpu_list = [7] #[0,1]
+gpu_list = [6] #[0,1]
 gpu_list_str = ','.join(map(str, gpu_list))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "/mnt/sdd/tb/model/{}/{}".format(args.exp, args.model)
+    snapshot_path = "/mnt/sdd/yd2tb/model/{}/{}".format(args.exp, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
 
