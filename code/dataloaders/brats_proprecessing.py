@@ -103,10 +103,10 @@ for p in all_flair:
     img, lab = brain_bbox(data, lab)
     img = MedicalImageDeal(img, percent=0.999).valid_img
     img = itensity_normalize_one_volume(img)
-    lab[lab ==4] = 3
+    lab[lab == 4] = 3
 
     uid = p.split("/")[-1]
     sitk.WriteImage(sitk.GetImageFromArray(
-        img), "/mnt/sdd/tb/brats2019_/t1ce/{}".format(uid))
+        img), "/mnt/sdd/tb/brats2019_4/t1ce/{}".format(uid))
     sitk.WriteImage(sitk.GetImageFromArray(
-        lab), "/mnt/sdd/tb/brats2019_/label/{}".format(uid))
+        lab), "/mnt/sdd/tb/brats2019_4/label/{}".format(uid))

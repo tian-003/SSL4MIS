@@ -29,7 +29,7 @@ class MedicalImageDeal(object):
 
 
 slice_num = 0
-mask_path = sorted(glob.glob('/mnt/sdd/tb/brats2019_/label/*.nii.gz'))
+mask_path = sorted(glob.glob('/mnt/sdd/tb/brats2019_4/label/*.nii.gz'))
 for case in mask_path:
     label_itk = sitk.ReadImage(case)
     label = sitk.GetArrayFromImage(label_itk)
@@ -40,14 +40,14 @@ for case in mask_path:
 
 
     # image = MedicalImageDeal(image, percent=0.99).valid_img
-    # image = (image - image.min()) / (image.max() - image.min())
+    image = (image - image.min()) / (image.max() - image.min())
     # print(image.shape)
     image = image.astype(np.float32)
     item = case.split("/")[-1].split(".")[0].replace("_t1ce", "")
     if image.shape != label.shape:
         print("Error")
     print(item)
-    f = h5py.File('/mnt/sdd/tb/data/BraTS2019/BraTS2019_T1CE/{}.h5'.format(item), 'w')
+    f = h5py.File('/mnt/sdd/tb/data/Brats2019_4/{}.h5'.format(item), 'w')
     f.create_dataset('image', data=image, compression="gzip")
     f.create_dataset('label', data=label, compression="gzip")
     f.close()
