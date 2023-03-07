@@ -29,7 +29,7 @@ from val_2D import test_single_volume
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='../data/ACDC', help='Name of Experiment')
+                    default='/mnt/sdd/yd2tb/data/ACDC', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='ACDC/Uncertainty_Aware_Mean_Teacher', help='experiment_name')
 parser.add_argument('--model', type=str,
@@ -51,7 +51,7 @@ parser.add_argument('--num_classes', type=int,  default=4,
 # label and unlabel
 parser.add_argument('--labeled_bs', type=int, default=12,
                     help='labeled_batch_size per gpu')
-parser.add_argument('--labeled_num', type=int, default=136,
+parser.add_argument('--labeled_num', type=int, default=7,
                     help='labeled data')
 # costs
 parser.add_argument('--ema_decay', type=float,  default=0.99, help='ema_decay')
@@ -63,6 +63,11 @@ parser.add_argument('--consistency_rampup', type=float,
                     default=200.0, help='consistency_rampup')
 args = parser.parse_args()
 
+"""选择GPU ID"""
+gpu_list = [7] #[0,1]
+gpu_list_str = ','.join(map(str, gpu_list))
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def patients_to_slices(dataset, patiens_num):
     ref_dict = None
@@ -285,14 +290,11 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "../model/{}_{}_labeled/{}".format(
+    snapshot_path = "/mnt/sdd/yd2tb/work_dirs/{}_{}_labeled/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
-    if os.path.exists(snapshot_path + '/code'):
-        shutil.rmtree(snapshot_path + '/code')
-    shutil.copytree('.', snapshot_path + '/code',
-                    shutil.ignore_patterns(['.git', '__pycache__']))
+
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')

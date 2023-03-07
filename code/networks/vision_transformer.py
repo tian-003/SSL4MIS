@@ -19,6 +19,14 @@ from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from networks.swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
 
+from networks.mix_transformer import MixVisionTransformer,SegFormerHead
+from functools import partial
+# model settings
+norm_cfg = dict(type='SyncBN', requires_grad=True)
+# dict(type='SyncBN', requires_grad=True)
+
+
+
 logger = logging.getLogger(__name__)
 
 class SwinUnet(nn.Module):
@@ -44,11 +52,80 @@ class SwinUnet(nn.Module):
                                 ape=config.MODEL.SWIN.APE,
                                 patch_norm=config.MODEL.SWIN.PATCH_NORM,
                                 use_checkpoint=config.TRAIN.USE_CHECKPOINT)
+        
+        self.mix_transformer = MixVisionTransformer(img_size=config.DATA.IMG_SIZE,
+                                patch_size=4,
+                                in_chans=config.MODEL.SWIN.IN_CHANS,
+                                num_classes=self.num_classes,
+                                embed_dims=[32, 64, 160, 256],
+                                depths=config.MODEL.SWIN.DEPTHS,
+                                num_heads= [2, 4, 10, 16],                             
+                                mlp_ratios=[4, 4, 4, 4],
+                                qkv_bias=config.MODEL.SWIN.QKV_BIAS,
+                                qk_scale=config.MODEL.SWIN.QK_SCALE,
+                                norm_layer=partial(nn.LayerNorm, eps=1e-6),
+                                drop_rate=config.MODEL.DROP_RATE,
+                                drop_path_rate=config.MODEL.DROP_PATH_RATE,stride=[4,2,2,1],
+                                
+                            )
+# num_heads=[1, 2, 5, 8], [32, 64, 160, 256],
+# config.MODEL.SWIN.EMBED_DIM,
+# config.MODEL.SWIN.MLP_RATIO,config.MODEL.SWIN.NUM_HEADS,  
+        # self.segformerhead = SegFormerHead(in_channels=,channels=,
+        #          num_classes=self.num_classes,
+        #          dropout_ratio=0.1,
+        #          conv_cfg=None,
+        #          norm_cfg=None,
+        #          act_cfg=dict(type='ReLU'),
+        #          in_index=-1,
+        #          input_transform=None,
+        #          decoder_params=None,
+        #          ignore_index=255,
+        #          sampler=None,
+        #          align_corners=False)
+    # def __init__(self,
+    #              in_channels,
+    #              channels,
+    #              *,
+    #              num_classes,
+    #              dropout_ratio=0.1,
+    #              conv_cfg=None,
+    #              norm_cfg=None,
+    #              act_cfg=dict(type='ReLU'),
+    #              in_index=-1,
+    #              input_transform=None,
+    #              loss_decode=dict(
+    #                  type='CrossEntropyLoss',
+    #                  use_sigmoid=False,
+    #                  loss_weight=1.0),
+    #              decoder_params=None,
+    #              ignore_index=255,
+    #              sampler=None,
+    #              align_corners=False)
+        
 
+        self.seg_head=SegFormerHead(
+                            # type='SegFormerHead',
+                            in_channels=[32, 64, 160, 256],
+                            in_index=[0, 1, 2, 3],
+                            feature_strides=[4, 8, 16, 32],
+                            channels=128,
+                            dropout_ratio=0.1,
+                            num_classes=4,
+                            norm_cfg=norm_cfg,
+                            align_corners=False,
+                            decoder_params=dict(embed_dim=256),
+                            loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
+        
+
+
+                
     def forward(self, x):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
-        logits = self.swin_unet(x)
+        # logits = self.swin_unet(x)
+        logits = self.mix_transformer(x)
+        logits=self.seg_head(logits[0])
         return logits
 
     def load_from(self, config):
