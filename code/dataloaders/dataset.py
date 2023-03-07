@@ -44,7 +44,7 @@ class BaseDataSets(Dataset):
             self.sample_list = [item.replace("\n", "") for item in self.sample_list]
 
         elif self.split == "val":
-            with open(self._base_dir + "/val_volumes.list", "r") as f:
+            with open(self._base_dir + "/val.list", "r") as f:
                 self.sample_list = f.readlines()
             self.sample_list = [item.replace("\n", "") for item in self.sample_list]
         if num is not None and self.split == "train":
@@ -57,9 +57,9 @@ class BaseDataSets(Dataset):
     def __getitem__(self, idx):
         case = self.sample_list[idx]
         if self.split == "train":
-            h5f = h5py.File(self._base_dir + "/ACDC_training_slices/{}.h5".format(case), "r")
+            h5f = h5py.File(self._base_dir + "/data/slices/{}.h5".format(case), "r")
         else:
-            h5f = h5py.File(self._base_dir + "/ACDC_training_volumes/{}.h5".format(case), "r")
+            h5f = h5py.File(self._base_dir + "/data/{}.h5".format(case), "r")
         image = h5f["image"][:]
         label = h5f["label"][:]
         sample = {"image": image, "label": label}

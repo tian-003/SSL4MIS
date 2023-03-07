@@ -65,7 +65,7 @@ parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
 parser.add_argument('--base_lr', type=float,  default=0.01,
                     help='segmentation network learning rate')
-parser.add_argument('--patch_size', type=list,  default=[256, 256],
+parser.add_argument('--patch_size', type=list,  default=[224, 224],
                     help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
 parser.add_argument('--num_classes', type=int,  default=4,
@@ -165,6 +165,7 @@ def train(args, snapshot_path):
     batch_size = args.batch_size
     max_iterations = args.max_iterations
 
+<<<<<<< HEAD
     # def create_model(ema=False):
     #     # Network definition
     #     model = net_factory(net_type=args.model, in_chns=1,
@@ -180,6 +181,21 @@ def train(args, snapshot_path):
     model2 = ViT_seg(config, img_size=args.patch_size,
                     num_classes=args.num_classes).cuda()
     # model2.load_from(config)
+=======
+    def create_model(ema=False):
+        # Network definition
+        model = net_factory(net_type=args.model, in_chns=1,
+                            class_num=num_classes)
+        if ema:
+            for param in model.parameters():
+                param.detach_()
+        return model
+
+    model1 = create_model()
+    model2 = ViT_seg(config, img_size=args.patch_size,
+                     num_classes=args.num_classes).cuda()
+    model2.load_from(config)
+>>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
 
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
