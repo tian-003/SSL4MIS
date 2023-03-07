@@ -30,18 +30,18 @@ from val_3D import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/yd2tb/BraTS2019', help='Name of Experiment')
+                    default='../data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='BraTs2019_Mean_Teacher', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
-                    default=6000, help='maximum epoch number to train')
+                    default=30000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int, default=4,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
-parser.add_argument('--base_lr', type=float,  default=0.001,
+parser.add_argument('--base_lr', type=float,  default=0.01,
                     help='segmentation network learning rate')
 parser.add_argument('--patch_size', type=list,  default=[96, 96, 96],
                     help='patch size of network input')
@@ -63,11 +63,6 @@ parser.add_argument('--consistency_rampup', type=float,
 
 args = parser.parse_args()
 
-"""选择GPU ID"""
-gpu_list = [6] #[0,1]
-gpu_list_str = ','.join(map(str, gpu_list))
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_current_consistency_weight(epoch):
     # Consistency ramp-up from https://arxiv.org/abs/1610.02242
@@ -118,7 +113,7 @@ def train(args, snapshot_path):
         labeled_idxs, unlabeled_idxs, batch_size, batch_size-args.labeled_bs)
 
     trainloader = DataLoader(db_train, batch_sampler=batch_sampler,
-                             num_workers=8, pin_memory=True, worker_init_fn=worker_init_fn)
+                             num_workers=4, pin_memory=True, worker_init_fn=worker_init_fn)
 
     model.train()
     ema_model.train()
@@ -126,7 +121,7 @@ def train(args, snapshot_path):
     optimizer = optim.SGD(model.parameters(), lr=base_lr,
                           momentum=0.9, weight_decay=0.0001)
     ce_loss = CrossEntropyLoss()
-    dice_loss = losses.DiceLoss(4)
+    dice_loss = losses.DiceLoss(2)
 
     writer = SummaryWriter(snapshot_path + '/log')
     logging.info("{} iterations per epoch".format(len(trainloader)))
@@ -152,7 +147,8 @@ def train(args, snapshot_path):
                 ema_output = ema_model(ema_inputs)
                 ema_output_soft = torch.softmax(ema_output, dim=1)
 
-            loss_ce = ce_loss(outputs[:args.labeled_bs],label_batch[:args.labeled_bs][:])
+            loss_ce = ce_loss(outputs[:args.labeled_bs],
+                              label_batch[:args.labeled_bs][:])
             loss_dice = dice_loss(
                 outputs_soft[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1))
             supervised_loss = 0.5 * (loss_dice + loss_ce)
@@ -253,11 +249,14 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "/mnt/sdd/yd2tb/model/{}_{}/{}".format(
+    snapshot_path = "../model/{}_{}/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
-
+    if os.path.exists(snapshot_path + '/code'):
+        shutil.rmtree(snapshot_path + '/code')
+    shutil.copytree('.', snapshot_path + '/code',
+                    shutil.ignore_patterns(['.git', '__pycache__']))
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')

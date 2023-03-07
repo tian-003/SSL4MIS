@@ -5,7 +5,7 @@ from skimage import measure
 import nibabel as nib
 import SimpleITK as sitk
 import glob
-import os
+
 
 def brain_bbox(data, gt):
     mask = (data != 0)
@@ -95,18 +95,16 @@ class MedicalImageDeal(object):
         return (self.img - self.img.min()) / (self.img.max() - self.img.min())
 
 
-all_flair = glob.glob('/mnt/sdd/tb/BRATS2019_ori/ori/*/*/*_t1ce.nii.gz')
-# all_flair = glob.glob('/mnt/sdd/tb/BRATS2019/ori/*/*/*_t1ce.nii.gz')
+all_flair = glob.glob("flair/*_flair.nii.gz")
 for p in all_flair:
     data = sitk.GetArrayFromImage(sitk.ReadImage(p))
-    lab = sitk.GetArrayFromImage(sitk.ReadImage(p.replace("t1ce", "seg")))
+    lab = sitk.GetArrayFromImage(sitk.ReadImage(p.replace("flair", "seg")))
     img, lab = brain_bbox(data, lab)
     img = MedicalImageDeal(img, percent=0.999).valid_img
     img = itensity_normalize_one_volume(img)
-    lab[lab == 4] = 3
-
+    lab[lab > 0] = 1
     uid = p.split("/")[-1]
     sitk.WriteImage(sitk.GetImageFromArray(
-        img), "/mnt/sdd/tb/brats2019_4/t1ce/{}".format(uid))
+        img), "/media/xdluo/Data/brats19/data/flair/{}".format(uid))
     sitk.WriteImage(sitk.GetImageFromArray(
-        lab), "/mnt/sdd/tb/brats2019_4/label/{}".format(uid))
+        lab), "/media/xdluo/Data/brats19/data/label/{}".format(uid))

@@ -30,13 +30,13 @@ from val_3D import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/tb/data/BraTS2019', help='Name of Experiment')
+                    default='../data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='BraTs2019_Entropy_Minimization', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
-                    default=10000, help='maximum epoch number to train')
+                    default=30000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int, default=4,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
@@ -234,7 +234,10 @@ if __name__ == "__main__":
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
-
+    if os.path.exists(snapshot_path + '/code'):
+        shutil.rmtree(snapshot_path + '/code')
+    shutil.copytree('.', snapshot_path + '/code',
+                    shutil.ignore_patterns(['.git', '__pycache__']))
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
