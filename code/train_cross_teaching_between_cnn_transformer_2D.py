@@ -49,16 +49,16 @@ parser.add_argument('--root_path', type=str,
 parser.add_argument('--exp', type=str,
                     default='ACDC/Cross_Teaching_Between_CNN_Transformer', help='experiment_name')
 parser.add_argument('--model', type=str,
-                    default='ViT_Seg', help='model_name')
+                    default='unet', help='model_name')
 parser.add_argument('--max_iterations', type=int,
                     default=10000, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=16,
+parser.add_argument('--batch_size', type=int, default=2,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
 parser.add_argument('--base_lr', type=float,  default=0.01,
                     help='segmentation network learning rate')
-parser.add_argument('--patch_size', type=list,  default=[224, 224],
+parser.add_argument('--patch_size', type=list,  default=[256, 256],
                     help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
 parser.add_argument('--num_classes', type=int,  default=4,
@@ -91,7 +91,7 @@ parser.add_argument('--throughput', action='store_true',
                     help='Test throughput only')
 
 # label and unlabel
-parser.add_argument('--labeled_bs', type=int, default=8,
+parser.add_argument('--labeled_bs', type=int, default=1,
                     help='labeled_batch_size per gpu')
 parser.add_argument('--labeled_num', type=int, default=7,
                     help='labeled data')
@@ -107,7 +107,7 @@ args = parser.parse_args()
 config = get_config(args)
 
 """选择GPU ID"""
-gpu_list = [7] #[0,1]
+gpu_list = [4] #[0,1]
 gpu_list_str = ','.join(map(str, gpu_list))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -166,8 +166,7 @@ def train(args, snapshot_path):
 
     def create_model(ema=False):
         # Network definition
-        model = net_factory(net_type=args.model, in_chns=1,
-                            class_num=num_classes)
+        model = net_factory(net_type=args.model, in_chns=1,class_num=num_classes).cuda()
         if ema:
             for param in model.parameters():
                 param.detach_()
@@ -176,7 +175,7 @@ def train(args, snapshot_path):
     model1 = create_model()
     model2 = ViT_seg(config, img_size=args.patch_size,
                      num_classes=args.num_classes).cuda()
-    model2.load_from(config)
+    # model2.load_from(config)
 
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
@@ -230,8 +229,7 @@ def train(args, snapshot_path):
 
             outputs2 = model2(volume_batch)
             outputs_soft2 = torch.softmax(outputs2, dim=1)
-            consistency_weight = get_current_consistency_weight(
-                iter_num // 150)
+            consistency_weight = get_current_consistency_weight(iter_num // 150)
 
             loss1 = 0.5 * (ce_loss(outputs1[:args.labeled_bs], label_batch[:args.labeled_bs].long()) + dice_loss(
                 outputs_soft1[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
