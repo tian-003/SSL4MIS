@@ -30,13 +30,13 @@ from val_3D import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/tb/data/BraTS2019', help='Name of Experiment')
+                    default='../data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='BraTS2019_Interpolation_Consistency_Training', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 parser.add_argument('--max_iterations', type=int,
-                    default=10000, help='maximum epoch number to train')
+                    default=30000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int, default=4,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
@@ -85,7 +85,7 @@ def train(args, snapshot_path):
     train_data_path = args.root_path
     batch_size = args.batch_size
     max_iterations = args.max_iterations
-    num_classes = 4
+    num_classes = 2
 
     def create_model(ema=False):
         # Network definition
@@ -268,17 +268,14 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    """选择GPU ID"""
-    gpu_list = [5] #[0,1]
-    gpu_list_str = ','.join(map(str, gpu_list))
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
-
-    snapshot_path = "/mnt/sdd/tb/model/{}_{}_labeled/{}".format(
+    snapshot_path = "../model/{}_{}_labeled/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
-
+    if os.path.exists(snapshot_path + '/code'):
+        shutil.rmtree(snapshot_path + '/code')
+    shutil.copytree('.', snapshot_path + '/code',
+                    shutil.ignore_patterns(['.git', '__pycache__']))
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')

@@ -10,27 +10,23 @@ from test_3D_util import test_all_case
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/mnt/sdd/yd2tb/data/BraTS2019', help='Name of Experiment')
+                    default='../data/BraTS2019', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='BraTs2019_Fully_Supervised-3', help='experiment_name')
+                    default='BraTS2019/Interpolation_Consistency_Training_25', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_3D', help='model_name')
 
 
 def Inference(FLAGS):
-    snapshot_path = "/mnt/sdd/yd2tb/model/{}/{}".format(FLAGS.exp, FLAGS.model)
+    snapshot_path = "../model/{}/{}".format(FLAGS.exp, FLAGS.model)
     num_classes = 2
-<<<<<<< HEAD
-    test_save_path = "/mnt/sdd/yd2tb/model/{}/Prediction".format(FLAGS.exp)
-=======
-    test_save_path = "/mnt/sdd/tb/model/{}/Prediction-2".format(FLAGS.exp)
->>>>>>> fa27776dda0a66d2cc97af4d83d07910f34e1dad
+    test_save_path = "../model/{}/Prediction".format(FLAGS.exp)
     if os.path.exists(test_save_path):
         shutil.rmtree(test_save_path)
     os.makedirs(test_save_path)
     net = unet_3D(n_classes=num_classes, in_channels=1).cuda()
-    # save_mode_path = os.path.join(snapshot_path, '{}_best_model.pth'.format(FLAGS.model))
-    save_mode_path = 'model/BraTs2019_Fully_Supervised2/unet_3D/iter_1200_dice_0.7089.pth'
+    save_mode_path = os.path.join(
+        snapshot_path, '{}_best_model.pth'.format(FLAGS.model))
     net.load_state_dict(torch.load(save_mode_path))
     print("init weight from {}".format(save_mode_path))
     net.eval()
