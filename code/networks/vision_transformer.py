@@ -17,17 +17,17 @@ import numpy as np
 from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNorm
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
-from networks.swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
+from swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
 
-<<<<<<< HEAD
-from networks.mix_transformer import MixVisionTransformer,SegFormerHead
+
+from mix_transformer import MixVisionTransformer,SegFormerHead
 from functools import partial
 # model settings
 norm_cfg = dict(type='SyncBN', requires_grad=True)
 # dict(type='SyncBN', requires_grad=True)
-=======
+
 logger = logging.getLogger(__name__)
->>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
+
 
 
 
@@ -42,7 +42,6 @@ class SwinUnet(nn.Module):
 
         self.swin_unet = SwinTransformerSys(img_size=config.DATA.IMG_SIZE,
                                 patch_size=config.MODEL.SWIN.PATCH_SIZE,
-<<<<<<< HEAD
                                 in_chans=config.MODEL.SWIN.IN_CHANS,
                                 num_classes=self.num_classes,
                                 embed_dim=config.MODEL.SWIN.EMBED_DIM,
@@ -60,24 +59,17 @@ class SwinUnet(nn.Module):
         
         self.mix_transformer = MixVisionTransformer(img_size=config.DATA.IMG_SIZE,
                                 patch_size=4,
-=======
->>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
                                 in_chans=config.MODEL.SWIN.IN_CHANS,
                                 num_classes=self.num_classes,
-                                embed_dim=config.MODEL.SWIN.EMBED_DIM,
+                                embed_dim=[32, 64, 160, 256],
                                 depths=config.MODEL.SWIN.DEPTHS,
-<<<<<<< HEAD
                                 num_heads= [2, 4, 10, 16],                             
                                 mlp_ratios=[4, 4, 4, 4],
-=======
-                                num_heads=config.MODEL.SWIN.NUM_HEADS,
                                 window_size=config.MODEL.SWIN.WINDOW_SIZE,
                                 mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
->>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
                                 qkv_bias=config.MODEL.SWIN.QKV_BIAS,
                                 qk_scale=config.MODEL.SWIN.QK_SCALE,
                                 drop_rate=config.MODEL.DROP_RATE,
-<<<<<<< HEAD
                                 drop_path_rate=config.MODEL.DROP_PATH_RATE,stride=[4,2,2,1],
                                 
                             )
@@ -131,24 +123,17 @@ class SwinUnet(nn.Module):
                             loss_decode=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
         
 
-=======
-                                drop_path_rate=config.MODEL.DROP_PATH_RATE,
-                                ape=config.MODEL.SWIN.APE,
-                                patch_norm=config.MODEL.SWIN.PATCH_NORM,
-                                use_checkpoint=config.TRAIN.USE_CHECKPOINT)
->>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
+
 
                 
     def forward(self, x):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
-<<<<<<< HEAD
+
         # logits = self.swin_unet(x)
         logits = self.mix_transformer(x)
         logits=self.seg_head(logits[0])
-=======
-        logits = self.swin_unet(x)
->>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
+
         return logits
 
     def load_from(self, config):

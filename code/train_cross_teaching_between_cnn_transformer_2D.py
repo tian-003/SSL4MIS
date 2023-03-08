@@ -165,7 +165,7 @@ def train(args, snapshot_path):
     batch_size = args.batch_size
     max_iterations = args.max_iterations
 
-<<<<<<< HEAD
+
     # def create_model(ema=False):
     #     # Network definition
     #     model = net_factory(net_type=args.model, in_chns=1,
@@ -176,26 +176,12 @@ def train(args, snapshot_path):
     #     return model
 
     # model1 = create_model()
-    model1 = ViT_seg(config, img_size=args.patch_size,
-                     num_classes=args.num_classes).cuda()
-    model2 = ViT_seg(config, img_size=args.patch_size,
-                    num_classes=args.num_classes).cuda()
+    device = torch.device('cuda:4' if torch.cuda.is_available() else 'cpu')
+    model1 = ViT_seg(config, img_size=args.patch_size,num_classes=args.num_classes).cuda()
+    model2 = ViT_seg(config, img_size=args.patch_size,num_classes=args.num_classes).cuda()
     # model2.load_from(config)
-=======
-    def create_model(ema=False):
-        # Network definition
-        model = net_factory(net_type=args.model, in_chns=1,
-                            class_num=num_classes)
-        if ema:
-            for param in model.parameters():
-                param.detach_()
-        return model
-
-    model1 = create_model()
-    model2 = ViT_seg(config, img_size=args.patch_size,
-                     num_classes=args.num_classes).cuda()
-    model2.load_from(config)
->>>>>>> 4b85e138513ffdc751199104e569c33dd104f98b
+    model1=model1.to(device) 
+    model2=model2.to(device)    
 
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)

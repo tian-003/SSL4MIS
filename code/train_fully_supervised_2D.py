@@ -37,7 +37,7 @@ parser.add_argument('--num_classes', type=int,  default=4,
                     help='output channel of network')
 parser.add_argument('--max_iterations', type=int,
                     default=30000, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=24,
+parser.add_argument('--batch_size', type=int, default=48,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
@@ -46,9 +46,10 @@ parser.add_argument('--base_lr', type=float,  default=0.01,
 parser.add_argument('--patch_size', type=list,  default=[256, 256],
                     help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
-parser.add_argument('--labeled_num', type=int, default=50,
+parser.add_argument('--labeled_num', type=int, default=140,
                     help='labeled data')
 args = parser.parse_args()
+
 
 
 def patients_to_slices(dataset, patiens_num):
@@ -71,8 +72,9 @@ def train(args, snapshot_path):
     max_iterations = args.max_iterations
 
     labeled_slice = patients_to_slices(args.root_path, args.labeled_num)
-
+    device = torch.device('cuda:7' if torch.cuda.is_available() else 'cpu')
     model = net_factory(net_type=args.model, in_chns=1, class_num=num_classes)
+    model =model.to(device)
     db_train = BaseDataSets(base_dir=args.root_path, split="train", num=labeled_slice, transform=transforms.Compose([
         RandomGenerator(args.patch_size)
     ]))
@@ -88,10 +90,11 @@ def train(args, snapshot_path):
 
     model.train()
 
-    optimizer = optim.SGD(model.parameters(), lr=base_lr,
-                          momentum=0.9, weight_decay=0.0001)
-    ce_loss = CrossEntropyLoss()
-    dice_loss = losses.DiceLoss(num_classes)
+    optimizer = optim.SGD(model.parameters(), lr=base_lr,momentum=0.9, weight_decay=0.0001)
+    # ce_loss = CrossEntropyLoss()
+    # dice_loss = losses.DiceLoss(num_classes)
+    ce_loss = CrossEntropyLoss(ignore_index=4)
+    # dice_loss = losses.pDLoss(num_classes, ignore_index=4)
 
     writer = SummaryWriter(snapshot_path + '/log')
     logging.info("{} iterations per epoch".format(len(trainloader)))
@@ -104,15 +107,16 @@ def train(args, snapshot_path):
         for i_batch, sampled_batch in enumerate(trainloader):
 
             volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
-            volume_batch, label_batch = volume_batch.cuda(), label_batch.cuda()
+            volume_batch, label_batch = volume_batch.to(device), label_batch.to(device)
 
             outputs = model(volume_batch)
             outputs_soft = torch.softmax(outputs, dim=1)
 
             loss_ce = ce_loss(outputs, label_batch[:].long())
-            loss_dice = dice_loss(outputs_soft, label_batch.unsqueeze(1))
-            loss = 0.5 * (loss_dice + loss_ce)
-            
+            loss_dice = ce_loss(outputs, label_batch[:].long())
+
+            # loss = 0.5 * (loss_dice + loss_ce)
+            loss =  loss_ce
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -146,7 +150,7 @@ def train(args, snapshot_path):
                 metric_list = 0.0
                 for i_batch, sampled_batch in enumerate(valloader):
                     metric_i = test_single_volume(
-                        sampled_batch["image"], sampled_batch["label"], model, classes=num_classes)
+                        sampled_batch["image"], sampled_batch["label"], model, classes=num_classes,device=device)
                     metric_list += np.array(metric_i)
                 metric_list = metric_list / len(db_val)
                 for class_i in range(num_classes-1):
@@ -208,6 +212,11 @@ if __name__ == "__main__":
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
 
+    """选择GPU ID"""
+    # gpu_list = [7] #[0,1]
+    # gpu_list_str = ','.join(map(str, gpu_list))
+    # os.environ.setdefault("CUDA_VISIBLE_DEVICES", gpu_list_str)
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')

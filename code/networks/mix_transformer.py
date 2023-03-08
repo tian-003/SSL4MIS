@@ -403,7 +403,7 @@ class DWConv(nn.Module):
 
         return x
 
-from networks.decode_head import BaseDecodeHead
+from decode_head import BaseDecodeHead
 from mmseg.ops import resize
 from mmseg.models.utils import *
 from mmcv.cnn import ConvModule
