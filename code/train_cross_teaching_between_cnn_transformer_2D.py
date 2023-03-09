@@ -54,18 +54,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
                     default='/mnt/sdd/yd2tb/data/ACDC', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='ACDC/Cross_Teaching_Between_CNN_Transformer', help='experiment_name')
+                    default='ACDC/Cross_Teaching_Between_CNN_Transformer_2', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet', help='model_name')
 parser.add_argument('--max_iterations', type=int,
                     default=30000, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=16,
+parser.add_argument('--batch_size', type=int, default=8,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
 parser.add_argument('--base_lr', type=float,  default=0.01,
                     help='segmentation network learning rate')
-parser.add_argument('--patch_size', type=list,  default=[224, 224],
+parser.add_argument('--patch_size', type=list,  default=[256, 256],
                     help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
 parser.add_argument('--num_classes', type=int,  default=4,
@@ -98,9 +98,9 @@ parser.add_argument('--throughput', action='store_true',
                     help='Test throughput only')
 
 # label and unlabel
-parser.add_argument('--labeled_bs', type=int, default=8,
+parser.add_argument('--labeled_bs', type=int, default=4,
                     help='labeled_batch_size per gpu')
-parser.add_argument('--labeled_num', type=int, default=7,
+parser.add_argument('--labeled_num', type=int, default=14,
                     help='labeled data')
 # costs
 parser.add_argument('--ema_decay', type=float,  default=0.99, help='ema_decay')
@@ -168,8 +168,7 @@ def train(args, snapshot_path):
 
     # def create_model(ema=False):
     #     # Network definition
-    #     model = net_factory(net_type=args.model, in_chns=1,
-    #                         class_num=num_classes)
+    #     model = net_factory(net_type=args.model, in_chns=1,class_num=num_classes)
     #     if ema:
     #         for param in model.parameters():
     #             param.detach_()
@@ -177,9 +176,10 @@ def train(args, snapshot_path):
 
     # model1 = create_model()
     device = torch.device('cuda:4' if torch.cuda.is_available() else 'cpu')
-    model1 = ViT_seg(config, img_size=args.patch_size,num_classes=args.num_classes).cuda()
-    model2 = ViT_seg(config, img_size=args.patch_size,num_classes=args.num_classes).cuda()
+    model1 = ViT_seg(config, img_size=args.patch_size,num_classes=args.num_classes)
+    model2 = ViT_seg(config, img_size=args.patch_size,num_classes=args.num_classes)
     # model2.load_from(config)
+    
     model1=model1.to(device) 
     model2=model2.to(device)    
 
@@ -213,7 +213,9 @@ def train(args, snapshot_path):
                            momentum=0.9, weight_decay=0.0001)
     optimizer2 = optim.SGD(model2.parameters(), lr=base_lr,
                            momentum=0.9, weight_decay=0.0001)
-    ce_loss = CrossEntropyLoss()
+    # ce_loss = CrossEntropyLoss()
+    # dice_loss = losses.DiceLoss(num_classes)
+    ce_loss = CrossEntropyLoss(ignore_index=4)
     dice_loss = losses.DiceLoss(num_classes)
 
     writer = SummaryWriter(snapshot_path + '/log')
@@ -228,7 +230,7 @@ def train(args, snapshot_path):
         for i_batch, sampled_batch in enumerate(trainloader):
 
             volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
-            volume_batch, label_batch = volume_batch.cuda(), label_batch.cuda()
+            volume_batch, label_batch = volume_batch.to(device), label_batch.to(device)
 
             outputs1 = model1(volume_batch)
             outputs_soft1 = torch.softmax(outputs1, dim=1)
@@ -238,10 +240,12 @@ def train(args, snapshot_path):
             consistency_weight = get_current_consistency_weight(
                 iter_num // 150)
 
-            loss1 = 0.5 * (ce_loss(outputs1[:args.labeled_bs], label_batch[:args.labeled_bs].long()) + dice_loss(
-                outputs_soft1[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
-            loss2 = 0.5 * (ce_loss(outputs2[:args.labeled_bs], label_batch[:args.labeled_bs].long()) + dice_loss(
-                outputs_soft2[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
+            # loss1 = 0.5 * (ce_loss(outputs1[:args.labeled_bs], label_batch[:args.labeled_bs].long()) + dice_loss(
+            #     outputs_soft1[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
+            # loss2 = 0.5 * (ce_loss(outputs2[:args.labeled_bs], label_batch[:args.labeled_bs].long()) + dice_loss(
+            #     outputs_soft2[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
+            loss1 = ce_loss(outputs1[:args.labeled_bs], label_batch[:args.labeled_bs].long())
+            loss2 = ce_loss(outputs2[:args.labeled_bs], label_batch[:args.labeled_bs].long())
 
             pseudo_outputs1 = torch.argmax(
                 outputs_soft1[args.labeled_bs:].detach(), dim=1, keepdim=False)
@@ -302,7 +306,7 @@ def train(args, snapshot_path):
                 metric_list = 0.0
                 for i_batch, sampled_batch in enumerate(valloader):
                     metric_i = test_single_volume(
-                        sampled_batch["image"], sampled_batch["label"], model1, classes=num_classes, patch_size=args.patch_size)
+                        sampled_batch["image"].to(device), sampled_batch["label"].to(device), model1, device=device,classes=num_classes, patch_size=args.patch_size)
                     metric_list += np.array(metric_i)
                 metric_list = metric_list / len(db_val)
                 for class_i in range(num_classes-1):
@@ -337,7 +341,7 @@ def train(args, snapshot_path):
                 metric_list = 0.0
                 for i_batch, sampled_batch in enumerate(valloader):
                     metric_i = test_single_volume(
-                        sampled_batch["image"], sampled_batch["label"], model2, classes=num_classes, patch_size=args.patch_size)
+                        sampled_batch["image"].to(device), sampled_batch["label"].to(device), model2, device=device,classes=num_classes, patch_size=args.patch_size)
                     metric_list += np.array(metric_i)
                 metric_list = metric_list / len(db_val)
                 for class_i in range(num_classes-1):

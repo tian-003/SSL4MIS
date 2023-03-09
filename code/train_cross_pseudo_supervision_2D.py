@@ -29,7 +29,7 @@ from val_2D import test_single_volume
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='../data/ACDC', help='Name of Experiment')
+                    default='/mnt/sdd/yd2tb/data/ACDC', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='ACDC/Cross_Pseudo_Supervision', help='experiment_name')
 parser.add_argument('--model', type=str,
@@ -51,7 +51,7 @@ parser.add_argument('--num_classes', type=int,  default=4,
 # label and unlabel
 parser.add_argument('--labeled_bs', type=int, default=12,
                     help='labeled_batch_size per gpu')
-parser.add_argument('--labeled_num', type=int, default=136,
+parser.add_argument('--labeled_num', type=int, default=7,
                     help='labeled data')
 # costs
 parser.add_argument('--ema_decay', type=float,  default=0.99, help='ema_decay')
@@ -120,9 +120,11 @@ def train(args, snapshot_path):
             for param in model.parameters():
                 param.detach_()
         return model
-
+    device = torch.device('cuda:7' if torch.cuda.is_available() else 'cpu')
     model1 = create_model()
     model2 = create_model()
+    model1=model1.to(device) 
+    model2=model2.to(device)    
     
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
@@ -154,8 +156,11 @@ def train(args, snapshot_path):
                           momentum=0.9, weight_decay=0.0001)
     optimizer2 = optim.SGD(model2.parameters(), lr=base_lr,
                           momentum=0.9, weight_decay=0.0001)
-    ce_loss = CrossEntropyLoss()
+    # ce_loss = CrossEntropyLoss()
+    # dice_loss = losses.DiceLoss(num_classes)
+    ce_loss = CrossEntropyLoss(ignore_index=4)
     dice_loss = losses.DiceLoss(num_classes)
+
 
     writer = SummaryWriter(snapshot_path + '/log')
     logging.info("{} iterations per epoch".format(len(trainloader)))
@@ -169,7 +174,7 @@ def train(args, snapshot_path):
         for i_batch, sampled_batch in enumerate(trainloader):
 
             volume_batch, label_batch = sampled_batch['image'], sampled_batch['label']
-            volume_batch, label_batch = volume_batch.cuda(), label_batch.cuda()
+            volume_batch, label_batch = volume_batch.to(device), label_batch.to(device)
 
             outputs1  = model1(volume_batch)
             outputs_soft1 = torch.softmax(outputs1, dim=1)
@@ -178,11 +183,13 @@ def train(args, snapshot_path):
             outputs_soft2 = torch.softmax(outputs2, dim=1)
             consistency_weight = get_current_consistency_weight(iter_num // 150)
 
-            loss1 = 0.5 * (ce_loss(outputs1[:args.labeled_bs], label_batch[:][:args.labeled_bs].long()) + dice_loss(
-                outputs_soft1[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
-            loss2 = 0.5 * (ce_loss(outputs2[:args.labeled_bs], label_batch[:][:args.labeled_bs].long()) + dice_loss(
-                outputs_soft2[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
-
+            # loss1 = 0.5 * (ce_loss(outputs1[:args.labeled_bs], label_batch[:][:args.labeled_bs].long()) + dice_loss(
+            #     outputs_soft1[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
+            # loss2 = 0.5 * (ce_loss(outputs2[:args.labeled_bs], label_batch[:][:args.labeled_bs].long()) + dice_loss(
+            #     outputs_soft2[:args.labeled_bs], label_batch[:args.labeled_bs].unsqueeze(1)))
+            loss1 = ce_loss(outputs1[:args.labeled_bs], label_batch[:args.labeled_bs].long())
+            loss2 = ce_loss(outputs2[:args.labeled_bs], label_batch[:args.labeled_bs].long())
+            
             pseudo_outputs1 = torch.argmax(outputs_soft1[args.labeled_bs:].detach(), dim=1, keepdim=False)
             pseudo_outputs2 = torch.argmax(outputs_soft2[args.labeled_bs:].detach(), dim=1, keepdim=False)
 
@@ -238,7 +245,7 @@ def train(args, snapshot_path):
                 metric_list = 0.0
                 for i_batch, sampled_batch in enumerate(valloader):
                     metric_i = test_single_volume(
-                        sampled_batch["image"], sampled_batch["label"], model1, classes=num_classes)
+                        sampled_batch["image"].to(device), sampled_batch["label"].to(device),  model1, device=device,classes=num_classes)
                     metric_list += np.array(metric_i)
                 metric_list = metric_list / len(db_val)
                 for class_i in range(num_classes-1):
@@ -271,7 +278,7 @@ def train(args, snapshot_path):
                 metric_list = 0.0
                 for i_batch, sampled_batch in enumerate(valloader):
                     metric_i = test_single_volume(
-                        sampled_batch["image"], sampled_batch["label"], model2, classes=num_classes)
+                        sampled_batch["image"].to(device), sampled_batch["label"].to(device), model2, device=device,classes=num_classes)
                     metric_list += np.array(metric_i)
                 metric_list = metric_list / len(db_val)
                 for class_i in range(num_classes-1):
@@ -340,14 +347,11 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "../model/{}_{}/{}".format(
+    snapshot_path = "/mnt/sdd/yd2tb/work_dirs/model/{}_{}/{}".format(
         args.exp, args.labeled_num, args.model)
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
-    if os.path.exists(snapshot_path + '/code'):
-        shutil.rmtree(snapshot_path + '/code')
-    shutil.copytree('.', snapshot_path + '/code',
-                    shutil.ignore_patterns(['.git', '__pycache__']))
+
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')

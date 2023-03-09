@@ -30,14 +30,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
                     default='/mnt/sdd/yd2tb/data/ACDC', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
-                    default='ACDC/Fully_Supervised', help='experiment_name')
+                    default='ACDC/Fully_Supervised2', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet', help='model_name')
 parser.add_argument('--num_classes', type=int,  default=4,
                     help='output channel of network')
 parser.add_argument('--max_iterations', type=int,
                     default=30000, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=48,
+parser.add_argument('--batch_size', type=int, default=24,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
@@ -72,7 +72,7 @@ def train(args, snapshot_path):
     max_iterations = args.max_iterations
 
     labeled_slice = patients_to_slices(args.root_path, args.labeled_num)
-    device = torch.device('cuda:7' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:4' if torch.cuda.is_available() else 'cpu')
     model = net_factory(net_type=args.model, in_chns=1, class_num=num_classes)
     model =model.to(device)
     db_train = BaseDataSets(base_dir=args.root_path, split="train", num=labeled_slice, transform=transforms.Compose([
@@ -150,7 +150,7 @@ def train(args, snapshot_path):
                 metric_list = 0.0
                 for i_batch, sampled_batch in enumerate(valloader):
                     metric_i = test_single_volume(
-                        sampled_batch["image"], sampled_batch["label"], model, classes=num_classes,device=device)
+                        sampled_batch["image"].to(device), sampled_batch["label"].to(device), model, classes=num_classes,device=device)
                     metric_list += np.array(metric_i)
                 metric_list = metric_list / len(db_val)
                 for class_i in range(num_classes-1):
